@@ -2,13 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def main():
-
-	## Import Data
-
-	df = pd.read_csv('../Data/all.csv',sep=',')
-
-	##Preliminary Analysis
+def generate_boxplots(df):
 
 	population = df[df.columns[1:6]] #Create Boxplot for Population
 	population.plot(kind='box')
@@ -36,6 +30,53 @@ def main():
 	plt.ylabel('%')
 	plt.savefig('../Plots/literacy_rate_boxplot.png') #Big Gap Between Male and Female Literacy Rates
 	#Here's a thought - with more data we can delve into deeper analysis about gender inequality in India. 
+
+	return
+
+
+def correlation_matrix(data):
+
+	df = data.copy()
+	s = df.count()
+	df['Rural'] = pd.to_numeric(df['Rural'],errors='coerce')
+	for i,col in enumerate(df):
+		if s[i] < 578:
+			df.drop(col,inplace=True,axis=1) #Remove columns that have too many missing values
+
+	df.drop(['Unnamed: 0'],axis=1,inplace=True)
+	df = df._get_numeric_data() #Remove columns with non numeric data
+	df.dropna(how="any",inplace=True)
+	cols = df.columns
+	arr = np.array(df)
+	corr_mat = np.corrcoef(np.transpose(arr))
+	corr_mat = np.around(corr_mat,decimals=3)
+	np.savetxt("../Plots/corr_mat.csv", corr_mat,fmt = '%.3f',delimiter="\t") #Saved as a CSV file in plots folder
+	
+	return cols, corr_mat
+	
+
+	
+
+def main():
+
+	## Import Data
+
+	df = pd.read_csv('../Data/all.csv',sep=',')
+
+	##Preliminary Analysis
+	
+	generate_boxplots(df)
+	
+	##Find Correlation Matrix
+	
+	cols, corr_mat = correlation_matrix(df)
+
+
+
+	
+	
+
+
 
 	'''
 	Suggestions:
