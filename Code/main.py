@@ -1,6 +1,10 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
 
 def generate_boxplots(df):
 
@@ -34,52 +38,14 @@ def generate_boxplots(df):
 	return
 
 
-def correlation_matrix(data,filename):
-
+def preprocess(data):
+		##Modify df to include per capita values:
 	df = data.copy()
-	s = df.count()
-	df['Rural'] = pd.to_numeric(df['Rural'],errors='coerce')
-	df['Growth..1991...2001.'] = pd.to_numeric(df['Growth..1991...2001.'],errors='coerce')
-	for i,col in enumerate(df):
-		if s[i] < 578:
-			df.drop(col,inplace=True,axis=1) #Remove columns that have too many missing values
-
-	df.drop(['Unnamed: 0'],axis=1,inplace=True)
-	df = df._get_numeric_data() #Remove columns with non numeric data
-	df.dropna(how="any",inplace=True)
-	cols = df.columns
-	arr = np.array(df)
-	corr_mat = np.corrcoef(np.transpose(arr))
-	corr_mat = np.around(corr_mat,decimals=3)
-	np.savetxt("../Plots/"+filename+".csv", corr_mat,fmt = '%.3f',delimiter="\t") #Saved as a CSV file in plots folder
-	
-	return cols, corr_mat
-	
-
-	
-
-def main():
-
-	## Import Data
-
-	df = pd.read_csv('../Data/all.csv',sep=',')
-
-	##Preliminary Analysis
-	
-	#generate_boxplots(df)
-	
-	##Find Correlation Matrix
-	
-	cols, corr_mat = correlation_matrix(df,'corr_mat')
-
-	
-	##Modify df to include per capita values:
-	df_norm = df.copy()
 
 
 	#Find per capita values so that attributes don't depend too much on population
 
-	df_norm.drop(['Males','Females','Scheduled.Caste.population','Scheduled.Tribe.population','Number.of.households','Persons..literate','Males..Literate','Females..Literate'],axis=1,inplace=True)
+	df.drop(['Males','Females','Scheduled.Caste.population','Scheduled.Tribe.population','Number.of.households','Persons..literate','Males..Literate','Females..Literate'],axis=1,inplace=True)
 	
 	to_normalize = ['Rural','Urban','Total.Educated','Data.without.level','Below.Primary','Primary','Middle','Matric.Higher.Secondary.Diploma','Graduate.and.Above','X0...4.years','X5...14.years', \
 		'X15...59.years','X60.years.and.above..Incl..A.N.S..','Total.workers','Main.workers','Marginal.workers','Non.workers','SC.1.Population','SC.2.Population','SC.3.Population', \
@@ -91,17 +57,97 @@ def main():
 
 
 	for i in to_normalize:
-		df_norm[i] = pd.to_numeric(df_norm[i],errors='coerce')
-		df_norm[i] = df_norm[i].divide(df['Persons'])
+		df[i] = pd.to_numeric(df[i],errors='coerce')
+		df[i] = df[i].divide(data['Persons'])
 
 	for i in amenities:
-		df_norm[i] = pd.to_numeric(df_norm[i],errors='coerce')
-		df_norm[i] = df_norm[i].divide(df['Total.Inhabited.Villages'])
-		
-	cols_n, corr_mat_n = correlation_matrix(df_norm,'corr_mat_norm')	#Generate another correlation matrix for the modified data
+		df[i] = pd.to_numeric(df[i],errors='coerce')
+		df[i] = df[i].divide(data['Total.Inhabited.Villages'])
+
+	s = df.count()
+	df['Rural'] = pd.to_numeric(df['Rural'],errors='coerce')
+	df['Growth..1991...2001.'] = pd.to_numeric(df['Growth..1991...2001.'],errors='coerce')
+	for i,col in enumerate(df):
+		if s[i] < 578:
+			df.drop(col,inplace=True,axis=1) #Remove columns that have too many missing values
+
+	df.drop(['Unnamed: 0'],axis=1,inplace=True)
+	df = df._get_numeric_data() #Remove columns with non numeric data
+	df.dropna(how="any",inplace=True)
+	return df
+
+def correlation_matrix(data,filename):
+
+	df = data.copy()
+	cols = df.columns
+	arr = np.array(df)
+	corr_mat = np.corrcoef(np.transpose(arr))
+	corr_mat = np.around(corr_mat,decimals=3)
+	np.savetxt("../Plots/"+filename+".csv", corr_mat,fmt = '%.3f',delimiter="\t") #Saved as a CSV file in plots folder
+	
+	return cols, corr_mat
+	
+
+def pca(data):
+
+	df = data.copy()
+	arr = np.array(df)
+
+	#Zero mean unit variance:
+	scaler = StandardScaler()
+	arr = scaler.fit_transform(arr)
+
+	#Perform PCA
+	pca = PCA(n_components=5)
+	y = pca.fit_transform(arr)
+	components = pca.components_
+	print('Explained Variance Ratio:', pca.explained_variance_ratio_)
+
+	#Cluster Data
+	kmeans = KMeans(n_clusters=3).fit(y)
+	labels = kmeans.labels_
+	print('Silhouette Score:',silhouette_score(y,labels))
+	colors = ['y','b','g','r']
+
+	for i,lab in enumerate(labels):
+		plt.scatter(y[i,0],y[i,1],c=colors[lab%4])
+
+	for i in range(len(components)):
+		plt.arrow(0,0,components[i,0]*10,components[i,1]*10,color='r')
+	plt.title('Plot of First Two Principal Components')
+	plt.xlabel('Component 1')
+	plt.ylabel('Component 2')
+	plt.savefig('../Plots/principal_components.png')
+
+
+	return y, components, labels
+
+
+
+
+
+def main():
+
+	## Import Data
+
+	df = pd.read_csv('../Data/all.csv',sep=',')
+
+	##Preliminary Analysis
+	
+	#generate_boxplots(df)
+
+	# Preprocess Data - Find per capita vals, extract numeric data
+
+	df = preprocess(df)
+	
+	##Find Correlation Matrix
+	
+	cols_n, corr_mat_n = correlation_matrix(df,'corr_mat_norm')	#Generate another correlation matrix for the modified data
 
 	
-	
+	# Perform PCA
+
+	y, components, labels = pca(df)
 
 
 
